@@ -1,0 +1,18 @@
+{
+  "id": "redis",
+  "name": "Redis",
+  "version": "8.10.2-alpine",
+  "description": "Redis 8.10.2 Alpine. In-memory data store for cache, queues, and session storage.",
+  "logo": "redis.svg",
+  "links": {
+    "github": "https://github.com/redis/redis",
+    "website": "https://redis.io/",
+    "docs": "https://redis.io/docs/latest/operate/oss_and_stack/install/install-stack/docker/"
+  },
+  "tags": [
+    "database",
+    "cache",
+    "redis",
+    "in-memory"
+  ]
+}

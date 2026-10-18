@@ -1,0 +1,19 @@
+services:
+  redis:
+    image: redis:8.10.2-alpine
+    restart: unless-stopped
+    volumes:
+      - ../files/redis.conf:/usr/local/etc/redis/redis.conf
+      - redis-data:/data
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  redis-data: {}

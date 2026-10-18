@@ -1,0 +1,35 @@
+[variables]
+redis_password = "${password:32}"
+
+[config]
+env = [
+  "REDIS_PASSWORD=${redis_password}"
+]
+
+[[config.mounts]]
+filePath = "redis.conf"
+content = """
+bind 0.0.0.0
+port 6379
+protected-mode yes
+
+daemonize no
+supervised no
+loglevel notice
+logfile ""
+
+save 900 1
+save 300 10
+save 60 10000
+stop-writes-on-bgsave-error yes
+rdbcompression yes
+rdbchecksum yes
+dbfilename dump.rdb
+dir /data
+
+requirepass ${redis_password}
+
+appendonly yes
+appendfilename "appendonly.aof"
+appendfsync everysec
+"""
