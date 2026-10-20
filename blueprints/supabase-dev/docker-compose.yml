@@ -383,6 +383,13 @@ services:
       - ../files/volumes/db/logs.sql:/docker-entrypoint-initdb.d/migrations/99-logs.sql:Z
       - ../files/volumes/db/pooler.sql:/docker-entrypoint-initdb.d/migrations/99-pooler.sql:Z
       - db-config:/etc/postgresql-custom
+      - pg-certs:/etc/postgresql/custom_certs
+      - ../files/volumes/db/pg_ssl_wrapper.sh:/usr/local/bin/pg_ssl_wrapper.sh:ro,z
+    entrypoint:
+      [
+        "bash",
+        "/usr/local/bin/pg_ssl_wrapper.sh"
+      ]
     healthcheck:
       test:
         [
@@ -470,3 +477,4 @@ services:
 volumes:
   db-config:
   deno-cache:
+  pg-certs:
