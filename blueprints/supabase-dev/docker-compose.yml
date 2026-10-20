@@ -369,6 +369,8 @@ services:
   pg-cert:
     image: alpine:3.21
     restart: "no"
+    environment:
+      POSTGRES_TLS_SANS: ${POSTGRES_TLS_SANS:-}
     volumes:
       - pg-certs:/certs
       - ../files/volumes/db/pg_certgen.sh:/pg_certgen.sh:ro
