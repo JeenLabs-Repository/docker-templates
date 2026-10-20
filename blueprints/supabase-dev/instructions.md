@@ -261,6 +261,27 @@ every object sits under `stub/` forever. **Change it before the first upload;
 changing it afterwards orphans every object** — the bytes stay and no path
 resolves to them.
 
+## Postgres TLS certificate
+
+Postgres on port `5432` serves TLS with a certificate created on the server. The certificate is not in git. Change it from the **Environment** tab, then redeploy:
+
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `POSTGRES_TLS_CN` | Certificate common name | `supabase-postgres` |
+| `POSTGRES_TLS_DNS` | Comma-separated hostnames | `localhost,db` |
+| `POSTGRES_TLS_IPS` | Comma-separated IP addresses | `127.0.0.1` |
+| `POSTGRES_TLS_SANS` | Extra names that already include the type, such as `DNS:db.internal,IP:10.0.0.8` | empty |
+| `POSTGRES_TLS_DAYS` | Lifetime in days | `3650` |
+
+Example for a public server:
+
+```
+POSTGRES_TLS_DNS=localhost,db,db.example.com
+POSTGRES_TLS_IPS=127.0.0.1,203.0.113.10
+```
+
+The helper rewrites the certificate when one of these values changes. Clients use `sslmode=require`. `sslmode=verify-full` also needs the hostname or IP to be listed above, and the client must trust this self-signed certificate. Port `6543` is the pooler and does not use this certificate.
+
 ## Warning: changing POSTGRES_PASSWORD after the first deploy
 
 The Postgres data directory (mounted at `files/volumes/db/data`) is initialized **once**, on the first deploy, using the value of `POSTGRES_PASSWORD` at that moment. The same password is also assigned to the internal Supabase roles (`authenticator`, `pgbouncer`, `supabase_auth_admin`, `supabase_functions_admin`, `supabase_storage_admin`) by an init script that only runs on first boot.

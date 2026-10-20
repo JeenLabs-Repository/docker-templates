@@ -116,6 +116,22 @@ env = [
 'POSTGRES_PORT=5432',
 'POSTGRES_USER=postgres',
 '',
+'############',
+'# Postgres TLS certificate. Created on this server. Nothing is stored in git.',
+'# Edit these in the Environment tab, then redeploy. The certificate is',
+'# rewritten when any value changes, and left as-is when they stay the same.',
+'#',
+'# POSTGRES_TLS_DNS  comma-separated hostnames, example: localhost,db,db.example.com',
+'# POSTGRES_TLS_IPS  comma-separated addresses, example: 127.0.0.1,203.0.113.10',
+'# POSTGRES_TLS_SANS optional extra names that already include the type,',
+'#                   example: DNS:db.internal,IP:10.0.0.8',
+'############',
+'POSTGRES_TLS_CN=supabase-postgres',
+'POSTGRES_TLS_DNS=localhost,db',
+'POSTGRES_TLS_IPS=127.0.0.1',
+'POSTGRES_TLS_SANS=',
+'POSTGRES_TLS_DAYS=3650',
+'',
 '',
 '############',
 '# Supavisor -- Database pooler',
@@ -2110,24 +2126,75 @@ filePath = "/volumes/db/pg_certgen.sh"
 content = '''#!/bin/sh
 set -eu
 
-# Create the Postgres certificate on this server. Skip when it already exists.
-if [ -s /certs/server.crt ] && [ -s /certs/server.key ]; then
-  exit 0
+# Certificate settings come from the service environment.
+CN="${POSTGRES_TLS_CN:-supabase-postgres}"
+DNS_NAMES="${POSTGRES_TLS_DNS:-localhost,db}"
+IP_ADDRS="${POSTGRES_TLS_IPS:-127.0.0.1}"
+EXTRA_SANS="${POSTGRES_TLS_SANS:-}"
+DAYS="${POSTGRES_TLS_DAYS:-3650}"
+
+case "$DAYS" in
+  ""|*[!0-9]*)
+    echo "POSTGRES_TLS_DAYS must be a whole number of days" >&2
+    exit 1
+    ;;
+esac
+
+SANS=""
+append_san() {
+  if [ -n "$SANS" ]; then
+    SANS="$SANS,$1"
+  else
+    SANS="$1"
+  fi
+}
+add_prefixed() {
+  kind="$1"
+  list=$(printf '%s' "$2" | tr -d '[:space:]')
+  old_ifs="$IFS"
+  IFS=','
+  for item in $list; do
+    if [ -n "$item" ]; then
+      append_san "${kind}:${item}"
+    fi
+  done
+  IFS="$old_ifs"
+}
+
+add_prefixed DNS "$DNS_NAMES"
+add_prefixed IP "$IP_ADDRS"
+extra=$(printf '%s' "$EXTRA_SANS" | tr -d '[:space:]')
+old_ifs="$IFS"
+IFS=','
+for item in $extra; do
+  if [ -n "$item" ]; then
+    append_san "$item"
+  fi
+done
+IFS="$old_ifs"
+
+if [ -z "$SANS" ]; then
+  echo "Set POSTGRES_TLS_DNS, POSTGRES_TLS_IPS, or POSTGRES_TLS_SANS" >&2
+  exit 1
+fi
+
+REQUEST="$CN|$DAYS|$SANS"
+STAMP=/certs/server.stamp
+if [ -s /certs/server.crt ] && [ -s /certs/server.key ] && [ -f "$STAMP" ]; then
+  current=$(cat "$STAMP")
+  if [ "$current" = "$REQUEST" ]; then
+    exit 0
+  fi
 fi
 
 apk add --no-cache openssl
-SANS="DNS:localhost,DNS:db,IP:127.0.0.1"
-if [ -n "${POSTGRES_TLS_SANS:-}" ]; then
-  SANS="$SANS,$POSTGRES_TLS_SANS"
-fi
-
 cat > /tmp/pg-openssl.cnf <<EOF
 [req]
 distinguished_name = dn
 x509_extensions = v3_req
 prompt = no
 [dn]
-CN = supabase-postgres
+CN = $CN
 [v3_req]
 subjectAltName = $SANS
 basicConstraints = CA:FALSE
@@ -2135,11 +2202,12 @@ keyUsage = digitalSignature, keyEncipherment
 extendedKeyUsage = serverAuth
 EOF
 
-openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
+openssl req -x509 -newkey rsa:2048 -sha256 -days "$DAYS" -nodes \
   -keyout /certs/server.key \
   -out /certs/server.crt \
   -config /tmp/pg-openssl.cnf
-chmod 0644 /certs/server.crt /certs/server.key
+printf '%s\n' "$REQUEST" > "$STAMP"
+chmod 0644 /certs/server.crt /certs/server.key "$STAMP"
 '''
 
 [[config.mounts]]
