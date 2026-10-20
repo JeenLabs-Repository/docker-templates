@@ -371,6 +371,8 @@ services:
     # See: https://github.com/orgs/supabase/discussions/46080
     image: supabase/postgres:17.6.1.136
     restart: unless-stopped
+    ports:
+      - "5432:5432"
     volumes:
       - ../files/volumes/db/realtime.sql:/docker-entrypoint-initdb.d/migrations/99-realtime.sql:Z
       - ../files/volumes/db/webhooks.sql:/docker-entrypoint-initdb.d/init-scripts/98-webhooks.sql:Z
@@ -417,9 +419,8 @@ services:
   supavisor:
     image: supabase/supavisor:2.9.5
     restart: unless-stopped
-    expose:
-      - "5432"
-      - "6543"
+    ports:
+      - "6543:6543"
     volumes:
       - ../files/volumes/pooler/pooler.exs:/etc/pooler/pooler.exs:ro,z
     healthcheck:
