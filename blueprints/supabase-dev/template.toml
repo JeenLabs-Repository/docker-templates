@@ -2106,25 +2106,22 @@ Deno.serve(async (req: Request) => {
 """
 
 [[config.mounts]]
-filePath = "/volumes/db/pg_ssl_wrapper.sh"
-content = '''#!/bin/bash
-set -euo pipefail
+filePath = "/volumes/db/pg_certgen.sh"
+content = '''#!/bin/sh
+set -eu
 
-# Certificate files are created on the server at first start and kept in the
-# pg-certs volume. Nothing is stored in the template repository.
-CERT_DIR=/etc/postgresql/custom_certs
-CRT="$CERT_DIR/server.crt"
-KEY="$CERT_DIR/server.key"
+# Create the Postgres certificate on this server. Skip when it already exists.
+if [ -s /certs/server.crt ] && [ -s /certs/server.key ]; then
+  exit 0
+fi
 
-mkdir -p "$CERT_DIR"
+apk add --no-cache openssl
+SANS="DNS:localhost,DNS:db,IP:127.0.0.1"
+if [ -n "${POSTGRES_TLS_SANS:-}" ]; then
+  SANS="$SANS,$POSTGRES_TLS_SANS"
+fi
 
-if [ ! -s "$CRT" ] || [ ! -s "$KEY" ]; then
-  echo "Generating Postgres TLS certificate on this server"
-  SANS="DNS:localhost,DNS:db,IP:127.0.0.1"
-  if [ -n "${POSTGRES_TLS_SANS:-}" ]; then
-    SANS="$SANS,$POSTGRES_TLS_SANS"
-  fi
-  cat > /tmp/pg-openssl.cnf <<EOF
+cat > /tmp/pg-openssl.cnf <<EOF
 [req]
 distinguished_name = dn
 x509_extensions = v3_req
@@ -2137,11 +2134,36 @@ basicConstraints = CA:FALSE
 keyUsage = digitalSignature, keyEncipherment
 extendedKeyUsage = serverAuth
 EOF
-  openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
-    -keyout "$KEY" \
-    -out "$CRT" \
-    -config /tmp/pg-openssl.cnf
-  rm -f /tmp/pg-openssl.cnf
+
+openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
+  -keyout /certs/server.key \
+  -out /certs/server.crt \
+  -config /tmp/pg-openssl.cnf
+chmod 0644 /certs/server.crt /certs/server.key
+'''
+
+[[config.mounts]]
+filePath = "/volumes/db/pg_ssl_wrapper.sh"
+content = '''#!/bin/bash
+set -euo pipefail
+
+# The certificate is created on the server by the pg-cert service.
+# This script only installs it for the postgres user and starts the database.
+CERT_DIR=/etc/postgresql/custom_certs
+CRT="$CERT_DIR/server.crt"
+KEY="$CERT_DIR/server.key"
+
+for _ in $(seq 1 60); do
+  if [ -s "$CRT" ] && [ -s "$KEY" ]; then
+    break
+  fi
+  echo "Waiting for the server-generated TLS certificate"
+  sleep 1
+done
+
+if [ ! -s "$CRT" ] || [ ! -s "$KEY" ]; then
+  echo "TLS certificate was not created on this server" >&2
+  exit 1
 fi
 
 chown postgres:postgres "$CRT" "$KEY"

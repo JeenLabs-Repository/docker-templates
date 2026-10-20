@@ -366,11 +366,22 @@ services:
         "/home/deno/functions/main"
       ]
 
+  pg-cert:
+    image: alpine:3.21
+    restart: "no"
+    volumes:
+      - pg-certs:/certs
+      - ../files/volumes/db/pg_certgen.sh:/pg_certgen.sh:ro
+    entrypoint: ["/bin/sh", "/pg_certgen.sh"]
+
   db:
     # Major upgrade from Postgres 15 requires a dump/restore for existing installs.
     # See: https://github.com/orgs/supabase/discussions/46080
     image: supabase/postgres:17.6.1.136
     restart: unless-stopped
+    depends_on:
+      pg-cert:
+        condition: service_completed_successfully
     ports:
       - "5432:5432"
     volumes:
